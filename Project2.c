@@ -1,40 +1,41 @@
 // Project: Motor Control TB6612FNG & PID Park Mode Hold
-// Dev: NguyenDangHai_20233380 (Updated: PID Position Control for Park Mode)
+//Team 1
+//M√£ l·ªõp: 772642
 
 #include <avr/io.h>
 #define F_CPU 8000000UL
 #include <util/delay.h>
 #include <avr/interrupt.h>
-#include <stdlib.h> // S? d?ng h‡m abs()
+#include <stdlib.h> // S? d?ng h√†m abs()
 
-// M„ hex LED 7 do?n Anode chung (0 -> 9)
+// M√£ hex LED 7 do?n Anode chung (0 -> 9)
 const unsigned char led7_hex[10] = {0x88, 0xEB, 0x4C, 0x49, 0x2B, 0x19, 0x18, 0xCB, 0x08, 0x09};
 #define HEX_P 0x0E 
 
-// Tr?ng th·i h? th?ng: 0 = OFF, 1 = RUN, 2 = PARK (PID Hold)
+// Tr?ng th√°i h? th?ng: 0 = OFF, 1 = RUN, 2 = PARK (PID Hold)
 uint8_t system_mode = 0; 
 uint8_t prev_mode = 0;
 
-// --- BI?N ENCODER V¿ PID ---
-volatile int32_t current_pos = 0; // V? trÌ hi?n t?i c?a d?ng co
-int32_t target_pos = 0;           // V? trÌ m?c tiÍu khi khÛa b·nh
+// --- BI?N ENCODER V√Ä PID ---
+volatile int32_t current_pos = 0; // V? tr√≠ hi?n t?i c?a d?ng co
+int32_t target_pos = 0;           // V? tr√≠ m?c ti√™u khi kh√≥a b√°nh
 
-float Kp = 15.0;  // H? s? gÛc (L?c gi? chÌnh - tang n?u b·nh l?ng)
-float Ki = 0.5;   // H? s? tÌch ph‚n (KÈo b·nh v? d˙ng sai s? 0)
-float Kd = 2.0;   // H? s? vi ph‚n (Ch?ng rung, gi?m dao d?ng)
+float Kp = 15.0;  // H? s? g√≥c (L?c gi? ch√≠nh - tang n?u b√°nh l?ng)
+float Ki = 0.5;   // H? s? t√≠ch ph√¢n (K√©o b√°nh v? d√∫ng sai s? 0)
+float Kd = 2.0;   // H? s? vi ph√¢n (Ch?ng rung, gi?m dao d?ng)
 
 float integral = 0;
 int32_t last_error = 0;
 
-// C?u hÏnh ng?t ngo‡i INT0 (Ch‚n PD2) d? d?c Encoder KÍnh A
+// C?u h√¨nh ng?t ngo√†i INT0 (Ch√¢n PD2) d? d?c Encoder K√™nh A
 void Interrupt_Init() {
-    MCUCR |= (1 << ISC01); // KÌch ho?t ng?t khi cÛ su?n xu?ng (Falling Edge) trÍn INT0
-    GICR |= (1 << INT0);   // Cho phÈp ng?t INT0
+    MCUCR |= (1 << ISC01); // K√≠ch ho?t ng?t khi c√≥ su?n xu?ng (Falling Edge) tr√™n INT0
+    GICR |= (1 << INT0);   // Cho ph√©p ng?t INT0
 }
 
-// TrÏnh ph?c v? ng?t INT0 (M?i khi KÍnh A cÛ su?n xu?ng)
+// Tr√¨nh ph?c v? ng?t INT0 (M?i khi K√™nh A c√≥ su?n xu?ng)
 ISR(INT0_vect) {
-    // –?c tr?ng th·i KÍnh B (PD3) d? x·c d?nh chi?u
+    // √ê?c tr?ng th√°i K√™nh B (PD3) d? x√°c d?nh chi?u
     if (PIND & (1 << PD3)) {
         current_pos++; // Quay thu?n
     } else {
@@ -42,13 +43,13 @@ ISR(INT0_vect) {
     }
 }
 
-// C?u hÏnh PWM trÍn Timer2 (Ch‚n PD7 - OC2)
+// C?u h√¨nh PWM tr√™n Timer2 (Ch√¢n PD7 - OC2)
 void Timer2_PWM_Init() {
     TCCR2 = (1 << WGM20) | (1 << WGM21) | (1 << COM21) | (1 << CS22); // Fast PWM, Prescaler 64
     OCR2 = 0;
 }
 
-// H‡m di?u khi?n d?ng co chung
+// H√†m di?u khi?n d?ng co chung
 void Motor_Drive(int16_t speed) {
     if (speed > 0) {
         PORTD |= (1 << PD0);
@@ -59,37 +60,37 @@ void Motor_Drive(int16_t speed) {
         PORTD |= (1 << PD1);
         OCR2 = (speed < -255) ? 255 : abs(speed);
     } else {
-        // Phanh d?ng nang d? h? tr? ch?ng trÙi n?u sai s? PID = 0
+        // Phanh d?ng nang d? h? tr? ch?ng tr√¥i n?u sai s? PID = 0
         PORTD |= (1 << PD0) | (1 << PD1);
         OCR2 = 255;
     }
 }
 
 int main(void) {
-    // 1. C?u hÏnh PORT I/O
+    // 1. C?u h√¨nh PORT I/O
     DDRD |= (1 << PD0) | (1 << PD1); // Chi?u motor
     
-    DDRB &= 0xF0;  // PB0->PB3 l‡m ngı v‡o
-    PORTB |= 0x0F; // Tr? kÈo lÍn n?i b?
+    DDRB &= 0xF0;  // PB0->PB3 l√†m ng√µ v√†o
+    PORTB |= 0x0F; // Tr? k√©o l√™n n?i b?
 
     DDRC = 0xFF;   // C?ng xu?t LED 7 do?n
     
-    // PORTD: PD2(INT0, KÍnh A), PD3(KÍnh B) l‡ Input. PD7 (PWM) l‡ Output.
+    // PORTD: PD2(INT0, K√™nh A), PD3(K√™nh B) l√† Input. PD7 (PWM) l√† Output.
     DDRD = (1 << PD7) | (1 << PD0) | (1 << PD1) | (1 << PD4) | (1 << PD5) | (1 << PD6); 
-    PORTD |= (1 << PD2) | (1 << PD3); // Tr? kÈo lÍn cho 2 kÍnh Encoder
+    PORTD |= (1 << PD2) | (1 << PD3); // Tr? k√©o l√™n cho 2 k√™nh Encoder
 
     Timer2_PWM_Init();
     Interrupt_Init();
-    sei(); // B?t ng?t to‡n c?c
+    sei(); // B?t ng?t to√†n c?c
 
-    // 2. Bi?n v?n h‡nh bÏnh thu?ng
+    // 2. Bi?n v?n h√†nh b√¨nh thu?ng
     uint8_t motor_dir = 0;      
     uint8_t speed_level = 1;    
 
     while(1) {
-        prev_mode = system_mode; // Luu tr?ng th·i tru?c dÛ d? b?t s? ki?n chuy?n Mode
+        prev_mode = system_mode; // Luu tr?ng th√°i tru?c d√≥ d? b?t s? ki?n chuy?n Mode
 
-        // --- X? L› N⁄T NH?N PB0 (CHUY?N MODE) ---
+        // --- X? L√ù N√öT NH?N PB0 (CHUY?N MODE) ---
         if ((PINB & (1 << PB0)) == 0) {
             _delay_ms(20);
             if ((PINB & (1 << PB0)) == 0) {
@@ -99,7 +100,7 @@ int main(void) {
             }
         }
 
-        // --- N⁄T PB1: –?O CHI?U (Mode RUN) ---
+        // --- N√öT PB1: √ê?O CHI?U (Mode RUN) ---
         if ((PINB & (1 << PB1)) == 0) {
             _delay_ms(20);
             if ((PINB & (1 << PB1)) == 0) {
@@ -108,7 +109,7 @@ int main(void) {
             }
         }
 
-        // --- N⁄T PB2: GI?M T?C –? (Mode RUN) ---
+        // --- N√öT PB2: GI?M T?C √ê? (Mode RUN) ---
         if ((PINB & (1 << PB2)) == 0) {
             _delay_ms(20);
             if ((PINB & (1 << PB2)) == 0) {
@@ -117,7 +118,7 @@ int main(void) {
             }
         }
 
-        // --- N⁄T PB3: TANG T?C –? (Mode RUN) ---
+        // --- N√öT PB3: TANG T?C √ê? (Mode RUN) ---
         if ((PINB & (1 << PB3)) == 0) {
             _delay_ms(20);
             if ((PINB & (1 << PB3)) == 0) {
@@ -127,10 +128,10 @@ int main(void) {
         }
 
         // ==========================================
-        //         X? L› –I?U KHI?N –?NG CO
+        //         X? L√ù √êI?U KHI?N √ê?NG CO
         // ==========================================
         if (system_mode == 1) { 
-            // --- MODE 1: RUN BÃNH THU?NG ---
+            // --- MODE 1: RUN B√åNH THU?NG ---
             int16_t current_speed_pwm = (speed_level == 10) ? 255 : (speed_level * 25);
             if (motor_dir == 1) current_speed_pwm = -current_speed_pwm;
             Motor_Drive(current_speed_pwm);
@@ -138,18 +139,18 @@ int main(void) {
         } else if (system_mode == 2) { 
             // --- MODE 2: PID POSITION PARK HOLD ---
             
-            // X?y ra duy nh?t 1 l?n khi v?a nh?y t? Mode kh·c sang Mode 2
+            // X?y ra duy nh?t 1 l?n khi v?a nh?y t? Mode kh√°c sang Mode 2
             if (prev_mode != 2) {
-                target_pos = current_pos; // Ch?t v? trÌ hi?n t?i l‡m m?c tiÍu
-                integral = 0;             // Reset b? tÌch ph‚n
-                last_error = 0;           // Reset b? vi ph‚n
+                target_pos = current_pos; // Ch?t v? tr√≠ hi?n t?i l√†m m?c ti√™u
+                integral = 0;             // Reset b? t√≠ch ph√¢n
+                last_error = 0;           // Reset b? vi ph√¢n
             }
 
-            // TÌnh to·n PID
+            // T√≠nh to√°n PID
             int32_t error = target_pos - current_pos;
             integral += error;
             
-            // Gi?i h?n kh‚u TÌch ph‚n (Anti-windup) tr·nh v?t l? qu· l?n
+            // Gi?i h?n kh√¢u T√≠ch ph√¢n (Anti-windup) tr√°nh v?t l? qu√° l?n
             if (integral > 1000) integral = 1000;
             if (integral < -1000) integral = -1000;
 
@@ -164,14 +165,14 @@ int main(void) {
 
         } else { 
             // --- MODE 0: OFF ---
-            Motor_Drive(0); // L˙c n‡y g?i h‡m s? r? v‡o nh·nh h„m d?ng nang. 
-            // N?u b?n mu?n b·nh xe trÙi t? do ho‡n to‡n, c?u hÏnh IN1=0, IN2=0.
+            Motor_Drive(0); // L√∫c n√†y g?i h√†m s? r? v√†o nh√°nh h√£m d?ng nang. 
+            // N?u b?n mu?n b√°nh xe tr√¥i t? do ho√†n to√†n, c?u h√¨nh IN1=0, IN2=0.
             PORTD &= ~(1 << PD0);
             PORTD &= ~(1 << PD1);
             OCR2 = 0;
         }
 
-        // --- C?P NH?T LED 7 –O?N ---
+        // --- C?P NH?T LED 7 √êO?N ---
         if (system_mode == 2) {
             PORTC = HEX_P; 
         } else if (system_mode == 1) {
@@ -181,7 +182,7 @@ int main(void) {
             PORTC = led7_hex[0];
         }
 
-        _delay_ms(10); // L?y m?u PID v‡ vÚng l?p ? t?n s? 100Hz (10ms)
+        _delay_ms(10); // L?y m?u PID v√† v√≤ng l?p ? t?n s? 100Hz (10ms)
     }
     return 0;
 }
